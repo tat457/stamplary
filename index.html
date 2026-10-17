@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>位置情報スタンプラリー - GeoStamp Tour</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Leaflet CSS & JS for Maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <!-- Canvas Confetti for Celebration -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Yuji+Syuku&family=Zen+Maru+Gothic:wght@400;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Zen Maru Gothic', sans-serif;
+        }
+        .font-stamp {
+            font-family: 'Yuji Syuku', serif;
+        }
+        #map {
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+        /* Custom Pulse Marker for User Location */
+        .user-location-marker {
+            position: relative;
+        }
+        .user-location-marker .core {
+            width: 16px;
+            height: 16px;
+            background-color: #0284c7;
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 0 8px rgba(0,0,0,0.4);
+        }
+        .user-location-marker .pulse {
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            width: 32px;
+            height: 32px;
+            background-color: rgba(2, 132, 199, 0.4);
+            border-radius: 50%;
+            animation: pulse-ring 2s infinite ease-out;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
+        /* Stamp animation */
+        @keyframes stamp-bounce {
+            0% { transform: scale(3) rotate(-15deg); opacity: 0; }
+            50% { transform: scale(0.8) rotate(-5deg); opacity: 1; }
+            75% { transform: scale(1.1) rotate(-8deg); }
+            100% { transform: scale(1) rotate(-6deg); opacity: 0.9; }
+        }
+        .animate-stamp {
+            animation: stamp-bounce 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 flex flex-col h-screen overflow-hidden">
+
+    <!-- Header Navigation -->
+    <header class="bg-white border-b border-slate-200 px-4 py-3 flex items-center justify-between shadow-sm z-30 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white shadow-md">
+                <i class="fa-solid font-bold fa-map-location-dot text-xl"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-slate-800 leading-none">GeoStamp<span class="text-sky-600">ラリー</span></h1>
+                <p class="text-xs text-slate-500 mt-1" id="current-course-title">コース読み込み中...</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <!-- Demo Location Mode Toggle -->
+            <button id="btn-demo-mode" onclick="toggleDemoMode()" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition flex items-center gap-1.5">
+                <i class="fa-solid fa-gamepad"></i>
+                <span id="demo-mode-label">デモ移動: OFF</span>
+            </button>
+
+            <!-- Add Checkpoint Modal Trigger -->
+            <button onclick="openAddSpotModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 transition flex items-center gap-1.5 shadow-sm" title="チェックポイントを追加">
+                <i class="fa-solid fa-circle-plus text-sky-600"></i>
+                <span class="hidden sm:inline">スポット追加</span>
+            </button>
+
+            <!-- Course Switch Modal Trigger -->
+            <button onclick="openCourseModal()" class="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition" title="コース選択">
+                <i class="fa-solid fa-route text-lg"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Progress Banner -->
+    <div class="bg-sky-900 text-white px-4 py-2 flex items-center justify-between z-20 text-xs shadow-inner shrink-0">
+        <div class="flex items-center gap-2">
+            <i class="fa-solid fa-stamp text-amber-400"></i>
+            <span>獲得スタンプ: <strong id="stamp-count-text" class="text-amber-300 text-sm">0/0</strong></span>
+        </div>
+        <div class="w-32 bg-sky-950 rounded-full h-2.5 overflow-hidden border border-sky-700">
+            <div id="stamp-progress-bar" class="bg-gradient-to-r from-amber-400 to-emerald-400 h-full transition-all duration-500" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 relative flex flex-col md:flex-row overflow-hidden">
+        
+        <!-- Tab Views Container -->
+        <main class="flex-1 relative h-full flex flex-col">
+            
+            <!-- Map View Tab -->
+            <div id="view-map" class="w-full h-full relative flex flex-col">
+                <!-- Map element -->
+                <div id="map" class="flex-1 w-full"></div>
+
+                <!-- Map Picker Active Banner -->
+                <div id="picker-active-banner" class="absolute top-3 left-1/2 transform -translate-x-1/2 z-30 bg-amber-500 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-3 hidden animate-bounce text-xs font-bold">
+                    <i class="fa-solid fa-map-pin"></i>
+                    <span>地図上をタップしてスポット位置を指定してください</span>
+                    <button onclick="cancelMapLocationPicker()" class="bg-amber-700 hover:bg-amber-800 text-white text-[10px] px-2 py-0.5 rounded-md font-bold ml-1">
+                        キャンセル
+                    </button>
+                </div>
+
+                <!-- GPS Status Overlay Badge -->
+                <div class="absolute top-3 left-3 z-20 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-full shadow border border-slate-200 text-xs font-medium flex items-center gap-2">
+                    <span id="gps-indicator" class="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                    <span id="gps-status-text">位置情報を取得中...</span>
+                </div>
+
+                <!-- Nearest Spot Quick Action Floating Banner -->
+                <div id="nearest-spot-card" class="absolute bottom-4 left-4 right-4 z-20 bg-white/95 backdrop-blur border border-slate-200 rounded-2xl p-4 shadow-xl max-w-lg mx-auto transition-all transform translate-y-0">
+                    <div class="flex justify-between items-start mb-1">
+                        <div>
+                            <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-700 mb-1" id="nearest-category">最寄りのスポット</span>
+                            <h3 id="nearest-title" class="font-bold text-slate-800 text-base">スポットを検索中...</h3>
+                        </div>
+                        <span id="nearest-distance" class="text-xs font-bold px-2 py-1 bg-slate-100 text-slate-600 rounded-full">-- m</span>
+                    </div>
+                    <p id="nearest-desc" class="text-xs text-slate-500 line-clamp-1 mb-3">位置情報を読み込んで距離を測定します。</p>
+                    <button id="btn-checkin" onclick="triggerCheckIn()" disabled class="w-full py-2.5 bg-slate-300 text-slate-500 font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-sm disabled:cursor-not-allowed">
+                        <i class="fa-solid fa-location-crosshairs"></i>
+                        <span>チェックインエリア外です</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Stamp Book Tab -->
+            <div id="view-stamps" class="w-full h-full bg-slate-50 overflow-y-auto p-4 hidden">
+                <div class="max-w-3xl mx-auto space-y-4">
+                    <div class="bg-amber-100/70 border border-amber-200 rounded-2xl p-4 text-amber-900 flex items-center justify-between">
+                        <div>
+                            <h2 class="font-bold text-lg font-stamp">御朱印・スタンプ帳</h2>
+                            <p class="text-xs text-amber-800">すべてのスポットを巡ってスタンプをコンプリートしよう！</p>
+                        </div>
+                        <button onclick="clearProgress()" class="text-xs text-amber-700 underline hover:text-amber-900">進捗リセット</button>
+                    </div>
+
+                    <!-- Stamp Book Grid -->
+                    <div id="stamp-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                        <!-- Dynamic Stamp Cards generated here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Spot List Tab -->
+            <div id="view-list" class="w-full h-full bg-slate-50 overflow-y-auto p-4 hidden">
+                <div class="max-w-3xl mx-auto space-y-3" id="spot-list-container">
+                    <!-- Dynamic Spot List Items generated here -->
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Bottom Navigation Bar for Mobile -->
+        <nav class="bg-white border-t border-slate-200 flex justify-around py-2 px-3 z-30 shrink-0">
+            <button onclick="switchTab('map')" id="nav-map" class="flex flex-col items-center gap-1 text-sky-600 font-bold text-xs py-1 px-4 rounded-lg transition">
+                <i class="fa-solid fa-map-marked-alt text-lg"></i>
+                <span>マップ</span>
+            </button>
+            <button onclick="switchTab('stamps')" id="nav-stamps" class="flex flex-col items-center gap-1 text-slate-400 font-medium text-xs py-1 px-4 rounded-lg transition">
+                <i class="fa-solid fa-stamp text-lg"></i>
+                <span>スタンプ帳</span>
+            </button>
+            <button onclick="switchTab('list')" id="nav-list" class="flex flex-col items-center gap-1 text-slate-400 font-medium text-xs py-1 px-4 rounded-lg transition">
+                <i class="fa-solid fa-list-check text-lg"></i>
+                <span>スポット</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Stamp Success Modal -->
+    <div id="modal-stamp-success" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl transform transition-all border-4 border-amber-300 relative overflow-hidden">
+            <div class="absolute -top-12 -right-12 w-32 h-32 bg-amber-100 rounded-full opacity-50 pointer-events-none"></div>
+            
+            <span class="inline-block px-3 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-full mb-2">STAMP GET!</span>
+            <h2 id="modal-spot-name" class="text-xl font-bold text-slate-800 mb-1">スポット名</h2>
+            <p class="text-xs text-slate-500 mb-6">チェックイン完了！スタンプを獲得しました。</p>
+
+            <!-- Stamp Visual Display -->
+            <div class="w-36 h-36 mx-auto my-4 relative flex items-center justify-center">
+                <!-- Stamp Circle Paper Background -->
+                <div class="w-32 h-32 rounded-full border-2 border-dashed border-slate-300 bg-amber-50/50 flex items-center justify-center shadow-inner">
+                    <!-- Animated Stamp Mark -->
+                    <div id="modal-stamp-icon-box" class="w-28 h-28 rounded-full border-4 border-red-600 flex flex-col items-center justify-center text-red-600 font-stamp rotate-[-6deg] animate-stamp bg-white/40 shadow-sm">
+                        <i id="modal-stamp-icon" class="fa-solid fa-landmark text-3xl mb-1"></i>
+                        <span id="modal-stamp-label" class="text-xs font-bold tracking-widest">済</span>
+                        <span id="modal-stamp-date" class="text-[9px] opacity-80 mt-0.5">2026/10/17</span>
+                    </div>
+                </div>
+            </div>
+
+            <p id="modal-spot-desc" class="text-xs text-slate-600 my-4 bg-slate-50 p-3 rounded-xl text-left leading-relaxed">
+                スポットの説明文がここに入ります。
+            </p>
+
+            <button onclick="closeStampModal()" class="w-full py-3 bg-gradient-to-r from-sky-500 to-blue-600 text-white font-bold rounded-xl shadow-lg hover:from-sky-600 hover:to-blue-700 transition">
+                確認して次へ
+            </button>
+        </div>
+    </div>
+
+    <!-- Course Selection Modal -->
+    <div id="modal-courses" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-2xl max-h-[80vh] flex flex-col">
+            <div class="flex justify-between items-center mb-3 pb-2 border-b">
+                <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                    <i class="fa-solid fa-route text-sky-600"></i> スタンプラリーコース選択
+                </h3>
+                <button onclick="closeCourseModal()" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <button onclick="createNewCustomCourse()" class="w-full py-2.5 mb-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-xs">
+                <i class="fa-solid fa-circle-plus"></i>
+                <span>新しいカスタムコースを作成する</span>
+            </button>
+
+            <div id="course-list-options" class="space-y-3 overflow-y-auto flex-1 pr-1">
+                <!-- Course options dynamically inserted here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Custom Checkpoint Modal -->
+    <div id="modal-add-spot" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl max-h-[90vh] flex flex-col">
+            <div class="flex justify-between items-center mb-3 pb-2 border-b">
+                <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
+                    <i class="fa-solid fa-location-dot text-sky-600"></i> チェックポイント追加
+                </h3>
+                <button onclick="closeAddSpotModal()" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <form id="form-add-spot" onsubmit="handleSaveSpotSubmit(event)" class="space-y-3 text-xs overflow-y-auto pr-1">
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">スポット名 <span class="text-rose-500">*</span></label>
+                    <input type="text" id="spot-input-name" required placeholder="例: お気に入りのカフェ / ○○公園" class="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500 font-sans">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">カテゴリー</label>
+                        <input type="text" id="spot-input-category" placeholder="例: カフェ" value="カスタム" class="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500">
+                    </div>
+                    <div>
+                        <label class="block font-bold text-slate-700 mb-1">判定半径 (m)</label>
+                        <input type="number" id="spot-input-radius" min="10" max="1000" value="100" class="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">設置位置 (緯度・経度)</label>
+                    <div class="grid grid-cols-2 gap-2 mb-1.5">
+                        <input type="number" step="any" id="spot-input-lat" required placeholder="緯度 (Lat)" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-[11px]">
+                        <input type="number" step="any" id="spot-input-lng" required placeholder="経度 (Lng)" class="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-[11px]">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="setSpotLocationToCurrent()" class="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition flex items-center justify-center gap-1">
+                            <i class="fa-solid fa-crosshairs text-sky-600"></i> 現在地を設定
+                        </button>
+                        <button type="button" onclick="startMapLocationPicker()" class="flex-1 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-lg transition flex items-center justify-center gap-1 border border-sky-200">
+                            <i class="fa-solid fa-map-pin text-sky-600"></i> 地図から指定
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">アイコンを選択</label>
+                    <div class="grid grid-cols-6 gap-2" id="icon-selector-grid">
+                        <!-- Dynamic icons populated by JS -->
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-bold text-slate-700 mb-1">説明・見どころ</label>
+                    <textarea id="spot-input-desc" rows="2" placeholder="この場所のおすすめポイントやメモを入力..." class="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500 font-sans"></textarea>
+                </div>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="button" onclick="closeAddSpotModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow transition">
+                        保存して追加
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Custom Notification Toast -->
+    <div id="toast" class="fixed top-16 left-1/2 transform -translate-x-1/2 z-50 bg-slate-800 text-white text-xs font-medium px-4 py-2.5 rounded-full shadow-lg transition-all duration-300 opacity-0 pointer-events-none flex items-center gap-2">
+        <i id="toast-icon" class="fa-solid fa-circle-info text-sky-400"></i>
+        <span id="toast-msg">通知メッセージ</span>
+    </div>
+
+    <script>
+        /* Preset Courses with Spots */
+        const PRESET_COURSES = [
+            {
+                id: 'tokyo-highlights',
+                name: '東京ハイライト探訪コース',
+                description: '都内の超有名観光スポットを巡るおすすめコース',
+                spots: [
+                    { id: 't1', name: '東京タワー', lat: 35.658581, lng: 139.745433, radius: 100, category: 'ランドマーク', icon: 'fa-tower-observation', desc: '昭和33年開業の東京のシンボルタワー。高台からの眺望が抜群です。' },
+                    { id: 't2', name: '浅草寺 雷門', lat: 35.711105, lng: 139.796325, radius: 100, category: '歴史・文化', icon: 'fa-torii-gate', desc: '巨大な赤提灯が目印。都内最古の寺院で下町情緒を満喫できます。' },
+                    { id: 't3', name: '皇居外苑', lat: 35.685175, lng: 139.7528, radius: 150, category: '自然・史跡', icon: 'fa-tree', desc: '緑豊かな旧江戸城本丸跡。二重橋など歴史的な見どころが多くあります。' },
+                    { id: 't4', name: '渋谷スクランブル交差点', lat: 35.6595, lng: 139.7005, radius: 80, category: '街歩き', icon: 'fa-building-user', desc: '世界で最も有名な交差点の一つ。若者文化の発信地です。' }
+                ]
+            },
+            {
+                id: 'kyoto-historic',
+                name: '京都 歴史ロマン古都巡り',
+                description: '伝統と歴史を感じる人気の神社仏閣めぐり',
+                spots: [
+                    { id: 'k1', name: '清水寺', lat: 34.994856, lng: 135.785046, radius: 120, category: '国宝・寺院', icon: 'fa-gopuram', desc: '「清水の舞台」で知られる音羽山清水寺。絶景が楽しめます。' },
+                    { id: 'k2', name: '伏見稲荷大社', lat: 34.96714, lng: 135.772671, radius: 100, category: '神社', icon: 'fa-torii-gate', desc: '朱色の「千本鳥居」が立ち並ぶ幻想的な伏見稲荷の本社。' },
+                    { id: 'k3', name: '金閣寺 (鹿苑寺)', lat: 35.03937, lng: 135.729243, radius: 100, category: '国宝・寺院', icon: 'fa-sun', desc: '金箔で飾られた美しい舎利殿が鏡湖池に映える世界遺産。' }
+                ]
+            }
+        ];
+
+        // Global State
+        let currentCourse = PRESET_COURSES[0];
+        let userPos = { lat: 35.658581, lng: 139.745433 }; // Default (Tokyo Tower)
+        let visitedSpotIds = new Set();
+        let isDemoMode = false;
+        let map, userMarker, spotMarkers = {};
+
+        let customCourses = [];
+        let customSpotsByCourse = {};
+        let isPickingLocation = false;
+        let selectedIcon = 'fa-location-dot';
+
+        const SPOT_ICONS = [
+            'fa-location-dot', 'fa-mug-hot', 'fa-utensils', 'fa-tree', 
+            'fa-landmark', 'fa-camera', 'fa-bag-shopping', 'fa-star', 
+            'fa-torii-gate', 'fa-bicycle', 'fa-flag', 'fa-heart'
+        ];
+
+        function getCombinedSpots(course) {
+            const presets = course ? (course.spots || []) : [];
+            const customs = course ? (customSpotsByCourse[course.id] || []) : [];
+            return [...presets, ...customs];
+        }
+
+        /**
+         * Haversine formula to calculate distance in meters between two lat/lng coordinates
+         */
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Earth radius in meters
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δφ = (lat2 - lat1) * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+            const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                      Math.cos(φ1) * Math.cos(φ2) *
+                      Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+            return Math.round(R * c); // Distance in meters
+        }
+
+        // Initialize Map
+        function initMap() {
+            map = L.map('map', { zoomControl: false }).setView([userPos.lat, userPos.lng], 15);
+
+            // OpenStreetMap tiles
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; OpenStreetMap contributors',
+                maxZoom: 19
+            }).addTo(map);
+
+            // Add Zoom Control to Top Right
+            L.control.zoom({ position: 'topright' }).addTo(map);
+
+            // User Custom Marker
+            const userIcon = L.divIcon({
+                className: 'user-location-marker',
+                html: '<div class="pulse"></div><div class="core"></div>',
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            });
+
+            userMarker = L.marker([userPos.lat, userPos.lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
+
+            // Click Map in Demo Mode or Location Picker Mode
+            map.on('click', (e) => {
+                if (isPickingLocation) {
+                    onMapLocationPicked(e.latlng.lat, e.latlng.lng);
+                } else if (isDemoMode) {
+                    updateUserLocation(e.latlng.lat, e.latlng.lng);
+                    showToast('デモ位置を移動しました');
+                }
+            });
+
+            renderSpotMarkers();
+        }
+
+        // Render Spot Markers on Map
+        function renderSpotMarkers() {
+            // Clear existing
+            Object.values(spotMarkers).forEach(m => map.removeLayer(m));
+            spotMarkers = {};
+
+            const activeSpots = getCombinedSpots(currentCourse);
+
+            activeSpots.forEach(spot => {
+                const isVisited = visitedSpotIds.has(spot.id);
+
+                // Circle boundary for check-in radius
+                const circle = L.circle([spot.lat, spot.lng], {
+                    color: isVisited ? '#10b981' : (spot.isCustom ? '#8b5cf6' : '#0284c7'),
+                    fillColor: isVisited ? '#10b981' : (spot.isCustom ? '#8b5cf6' : '#0284c7'),
+                    fillOpacity: 0.15,
+                    weight: 1.5,
+                    dashArray: '4, 4',
+                    radius: spot.radius
+                }).addTo(map);
+
+                // Custom Pin Icon
+                const pinHtml = `
+                    <div class="flex items-center justify-center w-8 h-8 rounded-full ${isVisited ? 'bg-emerald-600' : (spot.isCustom ? 'bg-purple-600' : 'bg-rose-500')} text-white shadow-lg border-2 border-white transform transition hover:scale-110">
+                        <i class="fa-solid ${isVisited ? 'fa-check' : spot.icon} text-sm"></i>
+                    </div>
+                `;
+                const pinIcon = L.divIcon({
+                    className: 'custom-spot-pin',
+                    html: pinHtml,
+                    iconSize: [32, 32],
+                    iconAnchor: [16, 16]
+                });
+
+                const marker = L.marker([spot.lat, spot.lng], { icon: pinIcon }).addTo(map);
+                
+                // Popup info
+                marker.bindPopup(`
+                    <div class="p-1 text-center font-sans">
+                        <span class="text-[10px] font-bold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">${spot.category}</span>
+                        <h4 class="font-bold text-sm text-slate-800 mt-1">${spot.name}</h4>
+                        <p class="text-xs text-slate-500 mt-0.5">判定半径: ${spot.radius}m</p>
+                        ${isVisited ? '<span class="inline-block mt-1 text-xs text-emerald-600 font-bold"><i class="fa-solid fa-circle-check"></i> スタンプ獲得済</span>' : ''}
+                    </div>
+                `);
+
+                spotMarkers[spot.id] = marker;
+            });
+        }
+
+        // Geolocation setup
+        function startGeolocationTracking() {
+            if ('geolocation' in navigator) {
+                const indicator = document.getElementById('gps-indicator');
+                const statusText = document.getElementById('gps-status-text');
+
+                navigator.geolocation.watchPosition(
+                    (position) => {
+                        if (!isDemoMode) {
+                            const { latitude, longitude } = position.coords;
+                            updateUserLocation(latitude, longitude);
+                            indicator.className = "w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse";
+                            statusText.innerText = "GPS受信用 (高精度)";
+                        }
+                    },
+                    (error) => {
+                        console.warn('GPS Error:', error.message);
+                        if (!isDemoMode) {
+                            indicator.className = "w-2.5 h-2.5 rounded-full bg-amber-500";
+                            statusText.innerText = "GPSオフ（デモモード推奨）";
+                        }
+                    },
+                    { enableHighAccuracy: true, maximumAge: 10000, timeout: 5000 }
+                );
+            }
+        }
+
+        function updateUserLocation(lat, lng) {
+            userPos = { lat, lng };
+            if (userMarker) {
+                userMarker.setLatLng([lat, lng]);
+            }
+            updateNearestSpotUI();
+            updateSpotList();
+        }
+
+        function toggleDemoMode() {
+            isDemoMode = !isDemoMode;
+            const btn = document.getElementById('btn-demo-mode');
+            const label = document.getElementById('demo-mode-label');
+            const indicator = document.getElementById('gps-indicator');
+            const statusText = document.getElementById('gps-status-text');
+
+            if (isDemoMode) {
+                btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-400 bg-emerald-50 text-emerald-700 transition flex items-center gap-1.5 shadow-sm";
+                label.innerText = "デモ移動: ON";
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-indigo-500";
+                statusText.innerText = "デモモード (地図タップで移動)";
+                showToast('デモモードON: 地図タップで位置変更できます');
+            } else {
+                btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition flex items-center gap-1.5";
+                label.innerText = "デモ移動: OFF";
+                indicator.className = "w-2.5 h-2.5 rounded-full bg-slate-400";
+                statusText.innerText = "GPS取得待ち...";
+            }
+        }
+
+        // Calculate nearest spot & update float card
+        function updateNearestSpotUI() {
+            const activeSpots = getCombinedSpots(currentCourse);
+            if (!currentCourse || activeSpots.length === 0) {
+                document.getElementById('nearest-title').innerText = "スポットがありません";
+                document.getElementById('nearest-category').innerText = "未登録";
+                document.getElementById('nearest-desc').innerText = "右上の「+ スポット追加」からチェックポイントを登録してください。";
+                document.getElementById('nearest-distance').innerText = "-- m";
+                const btnCheckin = document.getElementById('btn-checkin');
+                btnCheckin.disabled = true;
+                btnCheckin.innerText = "チェックポイントがありません";
+                return;
+            }
+
+            let nearest = null;
+            let minDistance = Infinity;
+
+            activeSpots.forEach(spot => {
+                const dist = calculateDistance(userPos.lat, userPos.lng, spot.lat, spot.lng);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    nearest = spot;
+                }
+            });
+
+            if (nearest) {
+                document.getElementById('nearest-title').innerText = nearest.name;
+                document.getElementById('nearest-category').innerText = nearest.category;
+                document.getElementById('nearest-desc').innerText = nearest.desc;
+                document.getElementById('nearest-distance').innerText = `${minDistance} m`;
+
+                const btnCheckin = document.getElementById('btn-checkin');
+                const isVisited = visitedSpotIds.has(nearest.id);
+
+                if (isVisited) {
+                    btnCheckin.disabled = true;
+                    btnCheckin.className = "w-full py-2.5 bg-emerald-100 text-emerald-700 font-bold rounded-xl shadow-none transition flex items-center justify-center gap-2 text-sm";
+                    btnCheckin.innerHTML = `<i class="fa-solid fa-circle-check"></i> スタンプ獲得済み`;
+                } else if (minDistance <= nearest.radius) {
+                    btnCheckin.disabled = false;
+                    btnCheckin.className = "w-full py-2.5 bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-bold rounded-xl shadow-lg transition transform active:scale-95 flex items-center justify-center gap-2 text-sm animate-bounce";
+                    btnCheckin.innerHTML = `<i class="fa-solid fa-stamp"></i> チェックインしてスタンプを押す！`;
+                } else {
+                    btnCheckin.disabled = true;
+                    btnCheckin.className = "w-full py-2.5 bg-slate-200 text-slate-500 font-bold rounded-xl shadow-none transition flex items-center justify-center gap-2 text-sm";
+                    btnCheckin.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i> あと ${minDistance - nearest.radius}m 近づいてください`;
+                }
+
+                // Store current nearest in button dataset
+                btnCheckin.dataset.spotId = nearest.id;
+            }
+        }
+
+        function triggerCheckIn() {
+            const btnCheckin = document.getElementById('btn-checkin');
+            const spotId = btnCheckin.dataset.spotId;
+            const activeSpots = getCombinedSpots(currentCourse);
+            const spot = activeSpots.find(s => s.id === spotId);
+
+            if (!spot) return;
+
+            // Add to visited
+            visitedSpotIds.add(spot.id);
+            saveProgress();
+
+            // Refresh visuals
+            renderSpotMarkers();
+            updateProgressUI();
+            updateNearestSpotUI();
+            renderStampGrid();
+
+            // Open Modal
+            document.getElementById('modal-spot-name').innerText = spot.name;
+            document.getElementById('modal-spot-desc').innerText = spot.desc;
+            document.getElementById('modal-stamp-icon').className = `fa-solid ${spot.icon} text-3xl mb-1`;
+            
+            const today = new Date();
+            document.getElementById('modal-stamp-date').innerText = `${today.getFullYear()}/${today.getMonth()+1}/${today.getDate()}`;
+            
+            document.getElementById('modal-stamp-success').classList.remove('hidden');
+
+            // Celebration effect
+            confetti({
+                particleCount: 80,
+                spread: 70,
+                origin: { y: 0.6 }
+            });
+
+            // Check if all spots completed
+            if (visitedSpotIds.size === activeSpots.length) {
+                setTimeout(() => {
+                    confetti({ particleCount: 200, spread: 100, origin: { y: 0.4 } });
+                    showToast('🎉 コースコンプリート！おめでとうございます！');
+                }, 800);
+            }
+        }
+
+        function closeStampModal() {
+            document.getElementById('modal-stamp-success').classList.add('hidden');
+        }
+
+        // Render Stamp Grid in Stamp Book
+        function renderStampGrid() {
+            const grid = document.getElementById('stamp-grid');
+            grid.innerHTML = '';
+            const activeSpots = getCombinedSpots(currentCourse);
+
+            if (activeSpots.length === 0) {
+                grid.innerHTML = `<div class="col-span-full text-center py-8 text-slate-400 text-xs">チェックポイントが設定されていません</div>`;
+                return;
+            }
+
+            activeSpots.forEach(spot => {
+                const isVisited = visitedSpotIds.has(spot.id);
+
+                const card = document.createElement('div');
+                card.className = `bg-white border rounded-2xl p-4 flex flex-col items-center justify-center text-center relative shadow-sm ${isVisited ? 'border-amber-300' : 'border-slate-200 opacity-60'}`;
+                
+                card.innerHTML = `
+                    <div class="w-20 h-20 rounded-full border-2 border-dashed ${isVisited ? 'border-red-400 bg-rose-50/30' : 'border-slate-300 bg-slate-50'} flex items-center justify-center mb-2 relative">
+                        ${isVisited ? `
+                            <div class="w-16 h-16 rounded-full border-2 border-red-600 text-red-600 flex flex-col items-center justify-center font-stamp rotate-[-8deg]">
+                                <i class="fa-solid ${spot.icon} text-xl mb-0.5"></i>
+                                <span class="text-[9px] font-bold">済</span>
+                            </div>
+                        ` : `
+                            <i class="fa-solid ${spot.icon} text-2xl text-slate-300"></i>
+                        `}
+                    </div>
+                    <span class="text-[10px] text-sky-600 font-bold mb-0.5">${spot.category}</span>
+                    <h4 class="font-bold text-xs text-slate-800">${spot.name}</h4>
+                `;
+
+                grid.appendChild(card);
+            });
+        }
+
+        // Render Spot List
+        function updateSpotList() {
+            const container = document.getElementById('spot-list-container');
+            container.innerHTML = '';
+            const activeSpots = getCombinedSpots(currentCourse);
+
+            if (activeSpots.length === 0) {
+                container.innerHTML = `<div class="text-center py-12 text-slate-400 text-xs">チェックポイントがありません。「+ スポット追加」から登録してみましょう！</div>`;
+                return;
+            }
+
+            activeSpots.forEach(spot => {
+                const dist = calculateDistance(userPos.lat, userPos.lng, spot.lat, spot.lng);
+                const isVisited = visitedSpotIds.has(spot.id);
+
+                const card = document.createElement('div');
+                card.className = "bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex items-center justify-between gap-3";
+                card.innerHTML = `
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl ${isVisited ? 'bg-emerald-100 text-emerald-600' : (spot.isCustom ? 'bg-purple-100 text-purple-600' : 'bg-slate-100 text-slate-500')} flex items-center justify-center shrink-0">
+                            <i class="fa-solid ${spot.icon} text-lg"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2">
+                                <h4 class="font-bold text-sm text-slate-800">${spot.name}</h4>
+                                ${isVisited ? '<span class="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-bold">獲得済</span>' : ''}
+                                ${spot.isCustom ? '<span class="text-[10px] bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded font-bold">カスタム</span>' : ''}
+                            </div>
+                            <p class="text-xs text-slate-500 mt-0.5 line-clamp-1">${spot.desc}</p>
+                        </div>
+                    </div>
+                    <div class="text-right shrink-0 flex items-center gap-2">
+                        <div>
+                            <span class="text-xs font-bold text-slate-600 block">${dist} m</span>
+                            <button onclick="panToSpot('${spot.id}')" class="text-[11px] text-sky-600 font-bold hover:underline mt-1 inline-block">
+                                位置を見る
+                            </button>
+                        </div>
+                        ${spot.isCustom ? `
+                            <button onclick="deleteCustomSpot('${spot.id}')" class="p-2 text-rose-400 hover:text-rose-600 transition" title="スポットを削除">
+                                <i class="fa-solid fa-trash-can text-sm"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        function panToSpot(spotId) {
+            const activeSpots = getCombinedSpots(currentCourse);
+            const spot = activeSpots.find(s => s.id === spotId);
+            if (spot && map) {
+                switchTab('map');
+                map.flyTo([spot.lat, spot.lng], 16, { duration: 1 });
+                if (spotMarkers[spot.id]) {
+                    spotMarkers[spot.id].openPopup();
+                }
+            }
+        }
+
+        // Update overall progress bar
+        function updateProgressUI() {
+            const activeSpots = getCombinedSpots(currentCourse);
+            const total = activeSpots.length;
+            const visited = visitedSpotIds.size;
+            const percent = total > 0 ? Math.round((visited / total) * 100) : 0;
+
+            document.getElementById('stamp-count-text').innerText = `${visited}/${total}`;
+            document.getElementById('stamp-progress-bar').style.width = `${percent}%`;
+            document.getElementById('current-course-title').innerText = currentCourse ? currentCourse.name : 'コース選択';
+        }
+
+        // Tab Switcher
+        function switchTab(tabName) {
+            ['map', 'stamps', 'list'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.add('hidden');
+                const navBtn = document.getElementById(`nav-${t}`);
+                navBtn.className = "flex flex-col items-center gap-1 text-slate-400 font-medium text-xs py-1 px-4 rounded-lg transition";
+            });
+
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+            const activeNav = document.getElementById(`nav-${tabName}`);
+            activeNav.className = "flex flex-col items-center gap-1 text-sky-600 font-bold text-xs py-1 px-4 rounded-lg transition";
+
+            if (tabName === 'map' && map) {
+                setTimeout(() => map.invalidateSize(), 200);
+            }
+        }
+
+        // Course Selection Modals
+        function openCourseModal() {
+            const container = document.getElementById('course-list-options');
+            container.innerHTML = '';
+
+            const allCourses = [...PRESET_COURSES, ...customCourses];
+
+            allCourses.forEach(course => {
+                const card = document.createElement('div');
+                const isSelected = currentCourse && course.id === currentCourse.id;
+                const spotCount = getCombinedSpots(course).length;
+
+                card.className = `p-3.5 rounded-xl border cursor-pointer transition flex items-center justify-between ${isSelected ? 'border-sky-500 bg-sky-50/60' : 'border-slate-200 hover:bg-slate-50'}`;
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h4 class="font-bold text-sm text-slate-800">${course.name}</h4>
+                            ${course.isCustom ? '<span class="text-[9px] bg-purple-100 text-purple-700 font-bold px-1.5 py-0.5 rounded">自作コース</span>' : ''}
+                        </div>
+                        <p class="text-xs text-slate-500 mt-0.5">${course.description}</p>
+                        <span class="inline-block mt-1 text-[10px] text-slate-400">スポット数: ${spotCount}箇所</span>
+                    </div>
+                    ${isSelected ? '<i class="fa-solid fa-circle-check text-sky-600 text-lg"></i>' : ''}
+                `;
+
+                card.onclick = () => selectCourse(course);
+                container.appendChild(card);
+            });
+
+            document.getElementById('modal-courses').classList.remove('hidden');
+        }
+
+        function closeCourseModal() {
+            document.getElementById('modal-courses').classList.add('hidden');
+        }
+
+        function selectCourse(course) {
+            currentCourse = course;
+            loadProgress();
+            closeCourseModal();
+
+            const activeSpots = getCombinedSpots(currentCourse);
+
+            // Set map center to first spot
+            if (activeSpots.length > 0) {
+                userPos = { lat: activeSpots[0].lat, lng: activeSpots[0].lng };
+                if (userMarker) userMarker.setLatLng([userPos.lat, userPos.lng]);
+                map.setView([userPos.lat, userPos.lng], 14);
+            }
+
+            renderSpotMarkers();
+            updateProgressUI();
+            updateNearestSpotUI();
+            renderStampGrid();
+            updateSpotList();
+            showToast(`「${course.name}」を開始します`);
+        }
+
+        function renderIconSelector() {
+            const grid = document.getElementById('icon-selector-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+
+            SPOT_ICONS.forEach(icon => {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = `p-2 rounded-xl border flex items-center justify-center text-lg transition ${selectedIcon === icon ? 'border-sky-500 bg-sky-50 text-sky-600 ring-2 ring-sky-300' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`;
+                btn.innerHTML = `<i class="fa-solid ${icon}"></i>`;
+                btn.onclick = () => {
+                    selectedIcon = icon;
+                    renderIconSelector();
+                };
+                grid.appendChild(btn);
+            });
+        }
+
+        function openAddSpotModal(lat = null, lng = null) {
+            renderIconSelector();
+            document.getElementById('spot-input-name').value = '';
+            document.getElementById('spot-input-category').value = 'カスタム';
+            document.getElementById('spot-input-radius').value = 100;
+            document.getElementById('spot-input-desc').value = '';
+
+            document.getElementById('spot-input-lat').value = lat !== null ? lat.toFixed(6) : userPos.lat.toFixed(6);
+            document.getElementById('spot-input-lng').value = lng !== null ? lng.toFixed(6) : userPos.lng.toFixed(6);
+
+            document.getElementById('modal-add-spot').classList.remove('hidden');
+        }
+
+        function closeAddSpotModal() {
+            document.getElementById('modal-add-spot').classList.add('hidden');
+        }
+
+        function setSpotLocationToCurrent() {
+            document.getElementById('spot-input-lat').value = userPos.lat.toFixed(6);
+            document.getElementById('spot-input-lng').value = userPos.lng.toFixed(6);
+            showToast('位置を現在地に設定しました');
+        }
+
+        function startMapLocationPicker() {
+            closeAddSpotModal();
+            isPickingLocation = true;
+            document.getElementById('picker-active-banner').classList.remove('hidden');
+            switchTab('map');
+        }
+
+        function cancelMapLocationPicker() {
+            isPickingLocation = false;
+            document.getElementById('picker-active-banner').classList.add('hidden');
+        }
+
+        function onMapLocationPicked(lat, lng) {
+            cancelMapLocationPicker();
+            openAddSpotModal(lat, lng);
+            showToast('選択した位置を反映しました');
+        }
+
+        function handleSaveSpotSubmit(e) {
+            e.preventDefault();
+            const name = document.getElementById('spot-input-name').value.trim();
+            const category = document.getElementById('spot-input-category').value.trim() || 'カスタム';
+            const radius = parseInt(document.getElementById('spot-input-radius').value, 10) || 100;
+            const lat = parseFloat(document.getElementById('spot-input-lat').value);
+            const lng = parseFloat(document.getElementById('spot-input-lng').value);
+            const desc = document.getElementById('spot-input-desc').value.trim() || 'ユーザー定義のチェックポイント';
+
+            if (!name || isNaN(lat) || isNaN(lng)) {
+                showToast('正しいスポット名と位置を入力してください');
+                return;
+            }
+
+            const newSpot = {
+                id: 'custom_' + Date.now(),
+                name,
+                category,
+                radius,
+                lat,
+                lng,
+                desc,
+                icon: selectedIcon,
+                isCustom: true
+            };
+
+            if (!customSpotsByCourse[currentCourse.id]) {
+                customSpotsByCourse[currentCourse.id] = [];
+            }
+            customSpotsByCourse[currentCourse.id].push(newSpot);
+
+            saveCustomData();
+            closeAddSpotModal();
+
+            renderSpotMarkers();
+            updateProgressUI();
+            updateNearestSpotUI();
+            renderStampGrid();
+            updateSpotList();
+
+            showToast(`「${name}」を追加しました！`);
+        }
+
+        function deleteCustomSpot(spotId) {
+            if (!confirm('このチェックポイントを削除しますか？')) return;
+
+            if (customSpotsByCourse[currentCourse.id]) {
+                customSpotsByCourse[currentCourse.id] = customSpotsByCourse[currentCourse.id].filter(s => s.id !== spotId);
+                visitedSpotIds.delete(spotId);
+                saveProgress();
+                saveCustomData();
+
+                renderSpotMarkers();
+                updateProgressUI();
+                updateNearestSpotUI();
+                renderStampGrid();
+                updateSpotList();
+                showToast('スポットを削除しました');
+            }
+        }
+
+        function createNewCustomCourse() {
+            const courseName = prompt('新規カスタムコース名を入力してください:', 'マイ探訪コース');
+            if (!courseName) return;
+
+            const newCourse = {
+                id: 'course_custom_' + Date.now(),
+                name: courseName,
+                description: 'ユーザー作成のオリジナルコース',
+                isCustom: true,
+                spots: []
+            };
+
+            customCourses.push(newCourse);
+            saveCustomData();
+            selectCourse(newCourse);
+            closeCourseModal();
+
+            openAddSpotModal();
+        }
+
+        function saveCustomData() {
+            localStorage.setItem('geostamp_custom_courses', JSON.stringify(customCourses));
+            localStorage.setItem('geostamp_custom_spots', JSON.stringify(customSpotsByCourse));
+        }
+
+        function loadCustomData() {
+            try {
+                const loadedCourses = localStorage.getItem('geostamp_custom_courses');
+                if (loadedCourses) customCourses = JSON.parse(loadedCourses);
+
+                const loadedSpots = localStorage.getItem('geostamp_custom_spots');
+                if (loadedSpots) customSpotsByCourse = JSON.parse(loadedSpots);
+            } catch (e) {
+                console.error('Custom data load error:', e);
+            }
+        }
+
+        // Local Storage handling
+        function saveProgress() {
+            const key = `geostamp_progress_${currentCourse.id}`;
+            localStorage.setItem(key, JSON.stringify(Array.from(visitedSpotIds)));
+        }
+
+        function loadProgress() {
+            const key = `geostamp_progress_${currentCourse.id}`;
+            const saved = localStorage.getItem(key);
+            if (saved) {
+                try {
+                    visitedSpotIds = new Set(JSON.parse(saved));
+                } catch (e) {
+                    visitedSpotIds = new Set();
+                }
+            } else {
+                visitedSpotIds = new Set();
+            }
+        }
+
+        function clearProgress() {
+            visitedSpotIds.clear();
+            saveProgress();
+            renderSpotMarkers();
+            updateProgressUI();
+            updateNearestSpotUI();
+            renderStampGrid();
+            updateSpotList();
+            showToast('進捗をリセットしました');
+        }
+
+        // Toast Notification Helper
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').innerText = msg;
+            toast.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none');
+            }, 3000);
+        }
+
+        // Application Initialization on Window Load
+        window.onload = function() {
+            loadCustomData();
+            loadProgress();
+            initMap();
+            startGeolocationTracking();
+            updateProgressUI();
+            updateNearestSpotUI();
+            renderStampGrid();
+            updateSpotList();
+        };
+    </script>
+</body>
+</html>
