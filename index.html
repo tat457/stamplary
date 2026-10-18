@@ -106,15 +106,15 @@
 
         <div class="flex items-center gap-2">
             <!-- Demo Location Mode Toggle -->
-            <button id="btn-demo-mode" onclick="toggleDemoMode()" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition flex items-center gap-1.5">
+            <button id="btn-demo-mode" onclick="toggleDemoMode()" class="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition flex items-center gap-1.5">
                 <i class="fa-solid fa-gamepad"></i>
-                <span id="demo-mode-label">デモ移動: OFF</span>
+                <span id="demo-mode-label" class="hidden sm:inline">デモ移動: OFF</span>
             </button>
 
             <!-- Add Checkpoint Modal Trigger -->
-            <button onclick="openAddSpotModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold border border-sky-300 bg-sky-50 text-sky-700 hover:bg-sky-100 transition flex items-center gap-1.5 shadow-sm" title="チェックポイントを追加">
-                <i class="fa-solid fa-circle-plus text-sky-600"></i>
-                <span class="hidden sm:inline">スポット追加</span>
+            <button onclick="openAddSpotModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-700 text-white transition flex items-center gap-1.5 shadow-md">
+                <i class="fa-solid fa-circle-plus"></i>
+                <span>スポット追加</span>
             </button>
 
             <!-- Course Switch Modal Trigger -->
@@ -146,12 +146,21 @@
                 <!-- Map element -->
                 <div id="map" class="flex-1 w-full"></div>
 
-                <!-- Map Picker Active Banner -->
+                <!-- Map Single Picker Active Banner -->
                 <div id="picker-active-banner" class="absolute top-3 left-1/2 transform -translate-x-1/2 z-30 bg-amber-500 text-white px-4 py-2 rounded-full shadow-lg flex items-center gap-3 hidden animate-bounce text-xs font-bold">
                     <i class="fa-solid fa-map-pin"></i>
                     <span>地図上をタップしてスポット位置を指定してください</span>
                     <button onclick="cancelMapLocationPicker()" class="bg-amber-700 hover:bg-amber-800 text-white text-[10px] px-2 py-0.5 rounded-md font-bold ml-1">
                         キャンセル
+                    </button>
+                </div>
+
+                <!-- Map Continuous Multi-Picker Active Banner -->
+                <div id="multi-picker-banner" class="absolute top-3 left-1/2 transform -translate-x-1/2 z-30 bg-indigo-600 text-white px-5 py-2.5 rounded-full shadow-xl flex items-center gap-3 hidden border-2 border-indigo-300 text-xs font-bold">
+                    <i class="fa-solid fa-layer-group text-amber-300 animate-pulse"></i>
+                    <span>連続配置中: 地図をタップしてピンを追加（追加数: <strong id="multi-added-count" class="text-amber-300 font-extrabold text-sm">0</strong>）</span>
+                    <button onclick="stopMultiMapLocationPicker()" class="bg-emerald-500 hover:bg-emerald-600 text-white text-xs px-3 py-1 rounded-lg font-bold ml-2 shadow">
+                        完了する
                     </button>
                 </div>
 
@@ -198,8 +207,16 @@
 
             <!-- Spot List Tab -->
             <div id="view-list" class="w-full h-full bg-slate-50 overflow-y-auto p-4 hidden">
-                <div class="max-w-3xl mx-auto space-y-3" id="spot-list-container">
-                    <!-- Dynamic Spot List Items generated here -->
+                <div class="max-w-3xl mx-auto space-y-3">
+                    <div class="flex justify-between items-center mb-2">
+                        <h3 class="font-bold text-sm text-slate-700">登録済みチェックポイント一覧</h3>
+                        <button onclick="openAddSpotModal()" class="text-xs text-sky-600 font-bold hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i> スポットを追加
+                        </button>
+                    </div>
+                    <div id="spot-list-container" class="space-y-3">
+                        <!-- Dynamic Spot List Items generated here -->
+                    </div>
                 </div>
             </div>
 
@@ -233,9 +250,7 @@
 
             <!-- Stamp Visual Display -->
             <div class="w-36 h-36 mx-auto my-4 relative flex items-center justify-center">
-                <!-- Stamp Circle Paper Background -->
                 <div class="w-32 h-32 rounded-full border-2 border-dashed border-slate-300 bg-amber-50/50 flex items-center justify-center shadow-inner">
-                    <!-- Animated Stamp Mark -->
                     <div id="modal-stamp-icon-box" class="w-28 h-28 rounded-full border-4 border-red-600 flex flex-col items-center justify-center text-red-600 font-stamp rotate-[-6deg] animate-stamp bg-white/40 shadow-sm">
                         <i id="modal-stamp-icon" class="fa-solid fa-landmark text-3xl mb-1"></i>
                         <span id="modal-stamp-label" class="text-xs font-bold tracking-widest">済</span>
@@ -263,11 +278,6 @@
                 </h3>
                 <button onclick="closeCourseModal()" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
-            
-            <button onclick="createNewCustomCourse()" class="w-full py-2.5 mb-3 bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-600 hover:to-indigo-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-2 text-xs">
-                <i class="fa-solid fa-circle-plus"></i>
-                <span>新しいカスタムコースを作成する</span>
-            </button>
 
             <div id="course-list-options" class="space-y-3 overflow-y-auto flex-1 pr-1">
                 <!-- Course options dynamically inserted here -->
@@ -275,20 +285,36 @@
         </div>
     </div>
 
-    <!-- Add Custom Checkpoint Modal -->
+    <!-- Add Checkpoint Modal (With Single / Batch Tabs) -->
     <div id="modal-add-spot" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
-        <div class="bg-white rounded-3xl max-w-md w-full p-5 shadow-2xl max-h-[90vh] flex flex-col">
+        <div class="bg-white rounded-3xl max-w-lg w-full p-5 shadow-2xl max-h-[90vh] flex flex-col">
+            
+            <!-- Modal Header with Mode Tabs -->
             <div class="flex justify-between items-center mb-3 pb-2 border-b">
                 <h3 class="font-bold text-slate-800 text-base flex items-center gap-2">
-                    <i class="fa-solid fa-location-dot text-sky-600"></i> チェックポイント追加
+                    <i class="fa-solid fa-location-dot text-sky-600"></i> チェックポイントの追加
                 </h3>
                 <button onclick="closeAddSpotModal()" class="text-slate-400 hover:text-slate-600 p-1"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
 
-            <form id="form-add-spot" onsubmit="handleSaveSpotSubmit(event)" class="space-y-3 text-xs overflow-y-auto pr-1">
+            <!-- Tab Buttons -->
+            <div class="flex border-b border-slate-200 mb-3">
+                <button id="add-tab-single" onclick="switchAddTab('single')" class="flex-1 py-2 text-xs font-bold border-b-2 border-sky-600 text-sky-600">
+                    <i class="fa-solid fa-plus-circle"></i> 1件ずつ登録
+                </button>
+                <button id="add-tab-multi" onclick="switchAddTab('multi')" class="flex-1 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-layer-group"></i> 地図連続タップ
+                </button>
+                <button id="add-tab-batch" onclick="switchAddTab('batch')" class="flex-1 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-file-import"></i> テキスト一括登録
+                </button>
+            </div>
+
+            <!-- TAB 1: Single Spot Form -->
+            <form id="form-add-spot-single" onsubmit="handleSaveSpotSubmit(event, false)" class="space-y-3 text-xs overflow-y-auto pr-1 flex-1">
                 <div>
                     <label class="block font-bold text-slate-700 mb-1">スポット名 <span class="text-rose-500">*</span></label>
-                    <input type="text" id="spot-input-name" required placeholder="例: お気に入りのカフェ / ○○公園" class="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500 font-sans">
+                    <input type="text" id="spot-input-name" required placeholder="例: お気に入りのカフェ / ○○神社" class="w-full px-3 py-2 rounded-xl border border-slate-300 focus:outline-none focus:border-sky-500 font-sans">
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
@@ -310,10 +336,10 @@
                     </div>
                     <div class="flex gap-2">
                         <button type="button" onclick="setSpotLocationToCurrent()" class="flex-1 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-lg transition flex items-center justify-center gap-1">
-                            <i class="fa-solid fa-crosshairs text-sky-600"></i> 現在地を設定
+                            <i class="fa-solid fa-crosshairs text-sky-600"></i> 現在地
                         </button>
                         <button type="button" onclick="startMapLocationPicker()" class="flex-1 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold rounded-lg transition flex items-center justify-center gap-1 border border-sky-200">
-                            <i class="fa-solid fa-map-pin text-sky-600"></i> 地図から指定
+                            <i class="fa-solid fa-map-pin text-sky-600"></i> 地図から単一指定
                         </button>
                     </div>
                 </div>
@@ -331,14 +357,61 @@
                 </div>
 
                 <div class="pt-2 flex gap-2">
-                    <button type="button" onclick="closeAddSpotModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">
-                        キャンセル
+                    <button type="button" onclick="handleSaveSpotSubmit(event, true)" class="flex-1 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 font-bold rounded-xl transition">
+                        保存して続けて追加
                     </button>
                     <button type="submit" class="flex-1 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold rounded-xl shadow transition">
-                        保存して追加
+                        保存して閉じる
                     </button>
                 </div>
             </form>
+
+            <!-- TAB 2: Multi-Tap Map Mode Explanation -->
+            <div id="form-add-spot-multi" class="space-y-4 text-xs flex-1 hidden flex flex-col justify-between py-2">
+                <div class="bg-indigo-50 border border-indigo-200 text-indigo-900 p-4 rounded-2xl space-y-2">
+                    <h4 class="font-bold text-sm flex items-center gap-2 text-indigo-800">
+                        <i class="fa-solid fa-hand-pointer text-indigo-600"></i> 地図連続タップモードとは？
+                    </h4>
+                    <p class="leading-relaxed">
+                        マップ画面でクリック/タップした場所に、**自動でピン（チェックポイント）を次々と連続で設置**できます。
+                    </p>
+                    <ul class="list-disc list-inside space-y-1 text-[11px] opacity-90 pl-1">
+                        <li>登録後、スポット一覧から名前や詳細をいつでも編集可能</li>
+                        <li>複数箇所のコースを一気に作成したい時におすすめです</li>
+                    </ul>
+                </div>
+
+                <button type="button" onclick="startMultiMapLocationPicker()" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition flex items-center justify-center gap-2 text-sm">
+                    <i class="fa-solid fa-map-marked-alt text-lg"></i>
+                    <span>マップを開いて連続タップを開始する</span>
+                </button>
+            </div>
+
+            <!-- TAB 3: Batch CSV / Text Import -->
+            <form id="form-add-spot-batch" onsubmit="handleBatchSpotSubmit(event)" class="space-y-3 text-xs flex-1 hidden flex flex-col justify-between">
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="block font-bold text-slate-700">複数スポットを一括入力 (カンマ区切り)</label>
+                        <button type="button" onclick="loadSampleBatchData()" class="text-[11px] text-sky-600 font-bold hover:underline">
+                            サンプルを入力
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-slate-500">
+                        1行ごとに <code>スポット名, 緯度, 経度</code> の形式で入力してください。
+                    </p>
+                    <textarea id="batch-input-text" rows="7" placeholder="例:&#10;東京駅, 35.681236, 139.767125&#10;銀座駅, 35.671989, 139.763965&#10;有楽町駅, 35.675069, 139.762804" class="w-full p-3 rounded-xl border border-slate-300 font-mono text-xs focus:outline-none focus:border-sky-500 leading-relaxed"></textarea>
+                </div>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="button" onclick="closeAddSpotModal()" class="flex-1 py-2.5 bg-slate-100 text-slate-600 font-bold rounded-xl hover:bg-slate-200 transition">
+                        キャンセル
+                    </button>
+                    <button type="submit" class="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-file-import"></i> 一括登録実行
+                    </button>
+                </div>
+            </form>
+
         </div>
     </div>
 
@@ -376,7 +449,7 @@
 
         // Global State
         let currentCourse = PRESET_COURSES[0];
-        let userPos = { lat: 35.658581, lng: 139.745433 }; // Default (Tokyo Tower)
+        let userPos = { lat: 35.658581, lng: 139.745433 }; // Default
         let visitedSpotIds = new Set();
         let isDemoMode = false;
         let map, userMarker, spotMarkers = {};
@@ -384,6 +457,8 @@
         let customCourses = [];
         let customSpotsByCourse = {};
         let isPickingLocation = false;
+        let isMultiPickingLocation = false;
+        let multiAddedCount = 0;
         let selectedIcon = 'fa-location-dot';
 
         const SPOT_ICONS = [
@@ -399,10 +474,10 @@
         }
 
         /**
-         * Haversine formula to calculate distance in meters between two lat/lng coordinates
+         * Haversine distance in meters
          */
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; // Earth radius in meters
+            const R = 6371e3;
             const φ1 = lat1 * Math.PI / 180;
             const φ2 = lat2 * Math.PI / 180;
             const Δφ = (lat2 - lat1) * Math.PI / 180;
@@ -413,23 +488,20 @@
                       Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-            return Math.round(R * c); // Distance in meters
+            return Math.round(R * c);
         }
 
         // Initialize Map
         function initMap() {
             map = L.map('map', { zoomControl: false }).setView([userPos.lat, userPos.lng], 15);
 
-            // OpenStreetMap tiles
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; OpenStreetMap contributors',
                 maxZoom: 19
             }).addTo(map);
 
-            // Add Zoom Control to Top Right
             L.control.zoom({ position: 'topright' }).addTo(map);
 
-            // User Custom Marker
             const userIcon = L.divIcon({
                 className: 'user-location-marker',
                 html: '<div class="pulse"></div><div class="core"></div>',
@@ -439,9 +511,11 @@
 
             userMarker = L.marker([userPos.lat, userPos.lng], { icon: userIcon, zIndexOffset: 1000 }).addTo(map);
 
-            // Click Map in Demo Mode or Location Picker Mode
+            // Click Map Events
             map.on('click', (e) => {
-                if (isPickingLocation) {
+                if (isMultiPickingLocation) {
+                    onMultiMapLocationPicked(e.latlng.lat, e.latlng.lng);
+                } else if (isPickingLocation) {
                     onMapLocationPicked(e.latlng.lat, e.latlng.lng);
                 } else if (isDemoMode) {
                     updateUserLocation(e.latlng.lat, e.latlng.lng);
@@ -454,7 +528,6 @@
 
         // Render Spot Markers on Map
         function renderSpotMarkers() {
-            // Clear existing
             Object.values(spotMarkers).forEach(m => map.removeLayer(m));
             spotMarkers = {};
 
@@ -463,7 +536,6 @@
             activeSpots.forEach(spot => {
                 const isVisited = visitedSpotIds.has(spot.id);
 
-                // Circle boundary for check-in radius
                 const circle = L.circle([spot.lat, spot.lng], {
                     color: isVisited ? '#10b981' : (spot.isCustom ? '#8b5cf6' : '#0284c7'),
                     fillColor: isVisited ? '#10b981' : (spot.isCustom ? '#8b5cf6' : '#0284c7'),
@@ -473,7 +545,6 @@
                     radius: spot.radius
                 }).addTo(map);
 
-                // Custom Pin Icon
                 const pinHtml = `
                     <div class="flex items-center justify-center w-8 h-8 rounded-full ${isVisited ? 'bg-emerald-600' : (spot.isCustom ? 'bg-purple-600' : 'bg-rose-500')} text-white shadow-lg border-2 border-white transform transition hover:scale-110">
                         <i class="fa-solid ${isVisited ? 'fa-check' : spot.icon} text-sm"></i>
@@ -488,7 +559,6 @@
 
                 const marker = L.marker([spot.lat, spot.lng], { icon: pinIcon }).addTo(map);
                 
-                // Popup info
                 marker.bindPopup(`
                     <div class="p-1 text-center font-sans">
                         <span class="text-[10px] font-bold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">${spot.category}</span>
@@ -546,20 +616,19 @@
             const statusText = document.getElementById('gps-status-text');
 
             if (isDemoMode) {
-                btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-400 bg-emerald-50 text-emerald-700 transition flex items-center gap-1.5 shadow-sm";
+                btn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border border-emerald-400 bg-emerald-50 text-emerald-700 transition flex items-center gap-1.5 shadow-sm";
                 label.innerText = "デモ移動: ON";
                 indicator.className = "w-2.5 h-2.5 rounded-full bg-indigo-500";
-                statusText.innerText = "デモモード (地図タップで移動)";
+                statusText.innerText = "デモモード (地図タップ移動)";
                 showToast('デモモードON: 地図タップで位置変更できます');
             } else {
-                btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition flex items-center gap-1.5";
+                btn.className = "px-2.5 py-1.5 rounded-lg text-xs font-bold border border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 transition flex items-center gap-1.5";
                 label.innerText = "デモ移動: OFF";
                 indicator.className = "w-2.5 h-2.5 rounded-full bg-slate-400";
                 statusText.innerText = "GPS取得待ち...";
             }
         }
 
-        // Calculate nearest spot & update float card
         function updateNearestSpotUI() {
             const activeSpots = getCombinedSpots(currentCourse);
             if (!currentCourse || activeSpots.length === 0) {
@@ -607,7 +676,6 @@
                     btnCheckin.innerHTML = `<i class="fa-solid fa-location-crosshairs"></i> あと ${minDistance - nearest.radius}m 近づいてください`;
                 }
 
-                // Store current nearest in button dataset
                 btnCheckin.dataset.spotId = nearest.id;
             }
         }
@@ -620,17 +688,14 @@
 
             if (!spot) return;
 
-            // Add to visited
             visitedSpotIds.add(spot.id);
             saveProgress();
 
-            // Refresh visuals
             renderSpotMarkers();
             updateProgressUI();
             updateNearestSpotUI();
             renderStampGrid();
 
-            // Open Modal
             document.getElementById('modal-spot-name').innerText = spot.name;
             document.getElementById('modal-spot-desc').innerText = spot.desc;
             document.getElementById('modal-stamp-icon').className = `fa-solid ${spot.icon} text-3xl mb-1`;
@@ -640,14 +705,12 @@
             
             document.getElementById('modal-stamp-success').classList.remove('hidden');
 
-            // Celebration effect
             confetti({
                 particleCount: 80,
                 spread: 70,
                 origin: { y: 0.6 }
             });
 
-            // Check if all spots completed
             if (visitedSpotIds.size === activeSpots.length) {
                 setTimeout(() => {
                     confetti({ particleCount: 200, spread: 100, origin: { y: 0.4 } });
@@ -660,7 +723,6 @@
             document.getElementById('modal-stamp-success').classList.add('hidden');
         }
 
-        // Render Stamp Grid in Stamp Book
         function renderStampGrid() {
             const grid = document.getElementById('stamp-grid');
             grid.innerHTML = '';
@@ -696,7 +758,6 @@
             });
         }
 
-        // Render Spot List
         function updateSpotList() {
             const container = document.getElementById('spot-list-container');
             container.innerHTML = '';
@@ -758,7 +819,6 @@
             }
         }
 
-        // Update overall progress bar
         function updateProgressUI() {
             const activeSpots = getCombinedSpots(currentCourse);
             const total = activeSpots.length;
@@ -770,7 +830,6 @@
             document.getElementById('current-course-title').innerText = currentCourse ? currentCourse.name : 'コース選択';
         }
 
-        // Tab Switcher
         function switchTab(tabName) {
             ['map', 'stamps', 'list'].forEach(t => {
                 document.getElementById(`view-${t}`).classList.add('hidden');
@@ -787,7 +846,6 @@
             }
         }
 
-        // Course Selection Modals
         function openCourseModal() {
             const container = document.getElementById('course-list-options');
             container.innerHTML = '';
@@ -831,7 +889,6 @@
 
             const activeSpots = getCombinedSpots(currentCourse);
 
-            // Set map center to first spot
             if (activeSpots.length > 0) {
                 userPos = { lat: activeSpots[0].lat, lng: activeSpots[0].lng };
                 if (userMarker) userMarker.setLatLng([userPos.lat, userPos.lng]);
@@ -864,8 +921,22 @@
             });
         }
 
+        function switchAddTab(tab) {
+            ['single', 'multi', 'batch'].forEach(t => {
+                document.getElementById(`form-add-spot-${t}`).classList.add('hidden');
+                const btn = document.getElementById(`add-tab-${t}`);
+                btn.className = "flex-1 py-2 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-600";
+            });
+
+            document.getElementById(`form-add-spot-${tab}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`add-tab-${tab}`);
+            activeBtn.className = "flex-1 py-2 text-xs font-bold border-b-2 border-sky-600 text-sky-600";
+        }
+
         function openAddSpotModal(lat = null, lng = null) {
             renderIconSelector();
+            switchAddTab('single');
+
             document.getElementById('spot-input-name').value = '';
             document.getElementById('spot-input-category').value = 'カスタム';
             document.getElementById('spot-input-radius').value = 100;
@@ -905,9 +976,59 @@
             showToast('選択した位置を反映しました');
         }
 
-        function handleSaveSpotSubmit(e) {
-            e.preventDefault();
-            const name = document.getElementById('spot-input-name').value.trim();
+        // Multi-Tap Map Placement
+        function startMultiMapLocationPicker() {
+            closeAddSpotModal();
+            isMultiPickingLocation = true;
+            multiAddedCount = 0;
+            document.getElementById('multi-added-count').innerText = "0";
+            document.getElementById('multi-picker-banner').classList.remove('hidden');
+            switchTab('map');
+            showToast('連続タップモード開始：地図上をタップしてください');
+        }
+
+        function stopMultiMapLocationPicker() {
+            isMultiPickingLocation = false;
+            document.getElementById('multi-picker-banner').classList.add('hidden');
+            showToast(`連続配置完了：${multiAddedCount}件のスポットを追加しました`);
+        }
+
+        function onMultiMapLocationPicked(lat, lng) {
+            const currentSpotCount = getCombinedSpots(currentCourse).length + 1;
+            const newSpot = {
+                id: 'custom_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                name: `チェックポイント ${currentSpotCount}`,
+                category: 'カスタム',
+                radius: 100,
+                lat,
+                lng,
+                desc: '地図上のタップ位置に作成されたスポット',
+                icon: 'fa-location-dot',
+                isCustom: true
+            };
+
+            if (!customSpotsByCourse[currentCourse.id]) {
+                customSpotsByCourse[currentCourse.id] = [];
+            }
+            customSpotsByCourse[currentCourse.id].push(newSpot);
+            multiAddedCount++;
+
+            document.getElementById('multi-added-count').innerText = multiAddedCount;
+
+            saveCustomData();
+            renderSpotMarkers();
+            updateProgressUI();
+            updateNearestSpotUI();
+            renderStampGrid();
+            updateSpotList();
+        }
+
+        // Single Spot Submit Logic
+        function handleSaveSpotSubmit(e, keepOpen = false) {
+            if (e) e.preventDefault();
+
+            const nameInput = document.getElementById('spot-input-name');
+            const name = nameInput.value.trim();
             const category = document.getElementById('spot-input-category').value.trim() || 'カスタム';
             const radius = parseInt(document.getElementById('spot-input-radius').value, 10) || 100;
             const lat = parseFloat(document.getElementById('spot-input-lat').value);
@@ -937,8 +1058,6 @@
             customSpotsByCourse[currentCourse.id].push(newSpot);
 
             saveCustomData();
-            closeAddSpotModal();
-
             renderSpotMarkers();
             updateProgressUI();
             updateNearestSpotUI();
@@ -946,6 +1065,78 @@
             updateSpotList();
 
             showToast(`「${name}」を追加しました！`);
+
+            if (keepOpen) {
+                nameInput.value = '';
+                document.getElementById('spot-input-desc').value = '';
+                nameInput.focus();
+            } else {
+                closeAddSpotModal();
+            }
+        }
+
+        // Batch CSV / Text Submit
+        function handleBatchSpotSubmit(e) {
+            e.preventDefault();
+            const rawText = document.getElementById('batch-input-text').value.trim();
+            if (!rawText) {
+                showToast('テキストデータを入力してください');
+                return;
+            }
+
+            const lines = rawText.split('\n');
+            let successCount = 0;
+
+            if (!customSpotsByCourse[currentCourse.id]) {
+                customSpotsByCourse[currentCourse.id] = [];
+            }
+
+            lines.forEach((line, index) => {
+                const parts = line.split(/[,，\t]/).map(p => p.trim());
+                if (parts.length >= 3) {
+                    const name = parts[0];
+                    const lat = parseFloat(parts[1]);
+                    const lng = parseFloat(parts[2]);
+
+                    if (name && !isNaN(lat) && !isNaN(lng)) {
+                        customSpotsByCourse[currentCourse.id].push({
+                            id: 'custom_' + Date.now() + '_' + index,
+                            name,
+                            category: '一括追加',
+                            radius: 100,
+                            lat,
+                            lng,
+                            desc: '一括登録されたチェックポイント',
+                            icon: 'fa-location-dot',
+                            isCustom: true
+                        });
+                        successCount++;
+                    }
+                }
+            });
+
+            if (successCount > 0) {
+                saveCustomData();
+                renderSpotMarkers();
+                updateProgressUI();
+                updateNearestSpotUI();
+                renderStampGrid();
+                updateSpotList();
+
+                closeAddSpotModal();
+                showToast(`🎉 ${successCount}箇所のスポットを一括追加しました！`);
+            } else {
+                showToast('有効なデータが見つかりませんでした。「スポット名, 緯度, 経度」で入力してください');
+            }
+        }
+
+        function loadSampleBatchData() {
+            document.getElementById('batch-input-text').value = 
+`上野恩賜公園, 35.7140, 139.7741
+東京国立博物館, 35.7189, 139.7765
+不忍池, 35.7119, 139.7712
+アメ横商店街, 35.7088, 139.7747`;
+            showToast('サンプルデータを読み込みました');
         }
 
         function deleteCustomSpot(spotId) {
@@ -1003,7 +1194,6 @@
             }
         }
 
-        // Local Storage handling
         function saveProgress() {
             const key = `geostamp_progress_${currentCourse.id}`;
             localStorage.setItem(key, JSON.stringify(Array.from(visitedSpotIds)));
@@ -1034,7 +1224,6 @@
             showToast('進捗をリセットしました');
         }
 
-        // Toast Notification Helper
         function showToast(msg) {
             const toast = document.getElementById('toast');
             document.getElementById('toast-msg').innerText = msg;
